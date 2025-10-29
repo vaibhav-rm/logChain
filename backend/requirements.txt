@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic     # optional - not used in minimal example
+python-dotenv
+web3
+py-solc-x
+pydantic
+httpx
+python-multipart
