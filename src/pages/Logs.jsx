@@ -1,0 +1,278 @@
+"use client"
+
+import { useState } from "react"
+import Card from "../components/Card"
+import Badge from "../components/Badge"
+
+export default function Logs() {
+  const [selectedBatch, setSelectedBatch] = useState(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filterStatus, setFilterStatus] = useState("all")
+
+  const [batches] = useState([
+    {
+      id: "batch-1247",
+      batchId: "server-1_2025-01-28T10:30",
+      merkleRoot: "0x7f3a2b9c4d1e8f5a6b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
+      timestamp: "2025-01-28 10:30:45",
+      size: 12452,
+      device: "server-prod-01",
+      status: "anchored",
+      txHash: "0x9c4d1e8f5a6b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7",
+      blockNumber: 18234567,
+      ipfsCid: "QmX7Y8Z9...",
+      logsCount: 1024,
+    },
+    {
+      id: "batch-1246",
+      batchId: "server-1_2025-01-28T10:15",
+      merkleRoot: "0x2a8f5c3d9e1b4f7a8c2d5e6f9a0b3c4d7e8f1a2b5c6d9e0f3a4b7c8d1e2f5a6",
+      timestamp: "2025-01-28 10:15:22",
+      size: 10234,
+      device: "server-prod-01",
+      status: "verified",
+      txHash: "0x3d9e1b4f7a8c2d5e6f9a0b3c4d7e8f1a2b5c6d9e0f3a4b7c8d1e2f5a6b9c0d3",
+      blockNumber: 18234512,
+      ipfsCid: "QmA1B2C3...",
+      logsCount: 896,
+    },
+    {
+      id: "batch-1245",
+      batchId: "server-2_2025-01-28T10:00",
+      merkleRoot: "0x5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
+      timestamp: "2025-01-28 10:00:11",
+      size: 8920,
+      device: "server-prod-02",
+      status: "pending",
+      txHash: null,
+      blockNumber: null,
+      ipfsCid: "QmD4E5F6...",
+      logsCount: 742,
+    },
+  ])
+
+  const filteredBatches = batches.filter((batch) => {
+    const matchesSearch =
+      batch.batchId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      batch.device.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesFilter = filterStatus === "all" || batch.status === filterStatus
+    return matchesSearch && matchesFilter
+  })
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-white mb-2">Log Batches</h1>
+        <p className="text-gray-400">View and manage anchored log batches</p>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search by batch ID or device..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input-field"
+            />
+          </div>
+          <div className="flex gap-2">
+            {["all", "anchored", "verified", "pending"].map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === status
+                    ? "bg-gradient-primary text-white"
+                    : "bg-dark-700 text-gray-400 hover:text-white"
+                }`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {/* Batches Table */}
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-dark-600">
+                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Batch ID</th>
+                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Device</th>
+                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Timestamp</th>
+                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Logs</th>
+                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Status</th>
+                <th className="text-left py-4 px-4 text-sm font-semibold text-gray-400">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBatches.map((batch, index) => (
+                <tr
+                  key={batch.id}
+                  className="border-b border-dark-600/50 hover:bg-dark-700/30 transition-colors animate-slide-up"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <td className="py-4 px-4">
+                    <span className="text-white font-mono text-sm">{batch.batchId}</span>
+                  </td>
+                  <td className="py-4 px-4">
+                    <span className="text-gray-300">{batch.device}</span>
+                  </td>
+                  <td className="py-4 px-4">
+                    <span className="text-gray-400 text-sm">{batch.timestamp}</span>
+                  </td>
+                  <td className="py-4 px-4">
+                    <span className="text-white font-medium">{batch.logsCount}</span>
+                  </td>
+                  <td className="py-4 px-4">
+                    <Badge status={batch.status === "anchored" || batch.status === "verified" ? "verified" : "offline"}>
+                      {batch.status}
+                    </Badge>
+                  </td>
+                  <td className="py-4 px-4">
+                    <button
+                      onClick={() => setSelectedBatch(batch)}
+                      className="text-neon-indigo hover:text-neon-purple transition-colors text-sm font-medium"
+                    >
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Batch Detail Modal */}
+      {selectedBatch && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedBatch(null)}
+        >
+          <div
+            className="glass-card max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-1">Batch Details</h2>
+                <p className="text-gray-400 font-mono text-sm">{selectedBatch.batchId}</p>
+              </div>
+              <button
+                onClick={() => setSelectedBatch(null)}
+                className="text-gray-400 hover:text-white transition-colors text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Batch Info */}
+              <div>
+                <h3 className="text-lg font-bold text-white mb-3">Batch Information</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-dark-700/50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-400 mb-1">Status</p>
+                    <Badge
+                      status={
+                        selectedBatch.status === "anchored" || selectedBatch.status === "verified"
+                          ? "verified"
+                          : "offline"
+                      }
+                    >
+                      {selectedBatch.status}
+                    </Badge>
+                  </div>
+                  <div className="bg-dark-700/50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-400 mb-1">Device</p>
+                    <p className="text-white font-medium">{selectedBatch.device}</p>
+                  </div>
+                  <div className="bg-dark-700/50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-400 mb-1">Timestamp</p>
+                    <p className="text-white font-medium">{selectedBatch.timestamp}</p>
+                  </div>
+                  <div className="bg-dark-700/50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-400 mb-1">Size</p>
+                    <p className="text-white font-medium">{(selectedBatch.size / 1024).toFixed(2)} KB</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Merkle Root */}
+              <div>
+                <h3 className="text-lg font-bold text-white mb-3">Merkle Root</h3>
+                <div className="bg-dark-700/50 p-4 rounded-lg">
+                  <p className="text-white font-mono text-sm break-all">{selectedBatch.merkleRoot}</p>
+                </div>
+              </div>
+
+              {/* Blockchain Info */}
+              {selectedBatch.txHash && (
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-3">Blockchain Anchor</h3>
+                  <div className="space-y-3">
+                    <div className="bg-dark-700/50 p-4 rounded-lg">
+                      <p className="text-sm text-gray-400 mb-2">Transaction Hash</p>
+                      <p className="text-white font-mono text-sm break-all">{selectedBatch.txHash}</p>
+                    </div>
+                    <div className="bg-dark-700/50 p-4 rounded-lg">
+                      <p className="text-sm text-gray-400 mb-2">Block Number</p>
+                      <p className="text-white font-medium">{selectedBatch.blockNumber?.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-dark-700/50 p-4 rounded-lg">
+                      <p className="text-sm text-gray-400 mb-2">IPFS CID</p>
+                      <p className="text-white font-mono text-sm">{selectedBatch.ipfsCid}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Merkle Tree Visualization */}
+              <div>
+                <h3 className="text-lg font-bold text-white mb-3">Merkle Tree Structure</h3>
+                <div className="bg-dark-700/50 p-6 rounded-lg">
+                  <div className="flex flex-col items-center space-y-4">
+                    {/* Root */}
+                    <div className="bg-gradient-primary p-3 rounded-lg text-white font-mono text-xs">
+                      Root: {selectedBatch.merkleRoot.slice(0, 10)}...
+                    </div>
+                    {/* Level 1 */}
+                    <div className="flex gap-4">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="bg-neon-indigo/20 border border-neon-indigo p-2 rounded text-xs">
+                          Node {i}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Level 2 */}
+                    <div className="flex gap-4">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="bg-dark-600 p-2 rounded text-xs text-gray-400">
+                          Leaf {i}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button className="btn-primary flex-1">Verify Batch</button>
+                <button className="btn-secondary flex-1">Get Merkle Proof</button>
+                <button className="btn-secondary">View on Explorer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
