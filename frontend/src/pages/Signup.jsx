@@ -1,7 +1,8 @@
 "use client"
 
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useState } from "react"
+import { signup } from "../api/auth"
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -10,10 +11,26 @@ export default function Signup() {
     password: "",
     confirmPassword: "",
   })
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    console.log("Signup:", formData)
+    setError("")
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+    try {
+      setLoading(true)
+      await signup({ email: formData.email, password: formData.password })
+      navigate("/dashboard")
+    } catch (err) {
+      setError(err.message || "Signup failed")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleChange = (e) => {
@@ -34,6 +51,11 @@ export default function Signup() {
 
         <div className="glass-card p-8 animate-slide-up">
           <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded p-3">
+                {error}
+              </div>
+            )}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
                 Full Name
@@ -98,8 +120,8 @@ export default function Signup() {
               />
             </div>
 
-            <button type="submit" className="btn-primary w-full">
-              Create Account
+            <button type="submit" className="btn-primary w-full" disabled={loading}>
+              {loading ? "Creating..." : "Create Account"}
             </button>
           </form>
 

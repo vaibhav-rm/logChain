@@ -1,16 +1,28 @@
 "use client"
 
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useState } from "react"
+import { login } from "../api/auth"
 
 export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // Handle login logic
-    console.log("Login:", { email, password })
+    setError("")
+    setLoading(true)
+    try {
+      await login({ email, password })
+      navigate("/dashboard")
+    } catch (err) {
+      setError(err.message || "Login failed")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -27,6 +39,11 @@ export default function Login() {
 
         <div className="glass-card p-8 animate-slide-up">
           <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded p-3">
+                {error}
+              </div>
+            )}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
                 Email Address
@@ -67,8 +84,8 @@ export default function Login() {
               </a>
             </div>
 
-            <button type="submit" className="btn-primary w-full">
-              Sign In
+            <button type="submit" className="btn-primary w-full" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 

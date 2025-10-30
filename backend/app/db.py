@@ -10,4 +10,8 @@ DB_NAME = os.getenv("DB_NAME", "logchain")
 
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
+
+batches_collection = db["batches"]
+users_collection = db["users"]
+devices_collection = db["devices"]
 batches_collection = db["batches"]

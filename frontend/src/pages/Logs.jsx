@@ -1,55 +1,46 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
+import { listBatches } from "../api/batches"
 
 export default function Logs() {
   const [selectedBatch, setSelectedBatch] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [batches, setBatches] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
-  const [batches] = useState([
-    {
-      id: "batch-1247",
-      batchId: "server-1_2025-01-28T10:30",
-      merkleRoot: "0x7f3a2b9c4d1e8f5a6b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
-      timestamp: "2025-01-28 10:30:45",
-      size: 12452,
-      device: "server-prod-01",
-      status: "anchored",
-      txHash: "0x9c4d1e8f5a6b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7",
-      blockNumber: 18234567,
-      ipfsCid: "QmX7Y8Z9...",
-      logsCount: 1024,
-    },
-    {
-      id: "batch-1246",
-      batchId: "server-1_2025-01-28T10:15",
-      merkleRoot: "0x2a8f5c3d9e1b4f7a8c2d5e6f9a0b3c4d7e8f1a2b5c6d9e0f3a4b7c8d1e2f5a6",
-      timestamp: "2025-01-28 10:15:22",
-      size: 10234,
-      device: "server-prod-01",
-      status: "verified",
-      txHash: "0x3d9e1b4f7a8c2d5e6f9a0b3c4d7e8f1a2b5c6d9e0f3a4b7c8d1e2f5a6b9c0d3",
-      blockNumber: 18234512,
-      ipfsCid: "QmA1B2C3...",
-      logsCount: 896,
-    },
-    {
-      id: "batch-1245",
-      batchId: "server-2_2025-01-28T10:00",
-      merkleRoot: "0x5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
-      timestamp: "2025-01-28 10:00:11",
-      size: 8920,
-      device: "server-prod-02",
-      status: "pending",
-      txHash: null,
-      blockNumber: null,
-      ipfsCid: "QmD4E5F6...",
-      logsCount: 742,
-    },
-  ])
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const res = await listBatches()
+        setBatches(
+          Array.isArray(res)
+            ? res.map((b) => ({
+                id: b.id,
+                batchId: b.batch_id || "—",
+                merkleRoot: b.merkle_root,
+                timestamp: "—",
+                size: b.size || 0,
+                device: b.device_id || "—",
+                status: b.anchored === 1 ? "anchored" : "pending",
+                txHash: b.tx_hash,
+                blockNumber: b.tx_block,
+                ipfsCid: b.ipfs_cid || "—",
+                logsCount: b.size || 0,
+              }))
+            : []
+        )
+      } catch (err) {
+        setError(err.message || "Failed to load batches")
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
 
   const filteredBatches = batches.filter((batch) => {
     const matchesSearch =

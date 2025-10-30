@@ -1,5 +1,5 @@
 # backend/app/schemas.py
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 class BatchCreate(BaseModel):
@@ -22,3 +22,12 @@ class BatchOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+
+class DeviceCreate(BaseModel):
+    device_id: str
+    name: str

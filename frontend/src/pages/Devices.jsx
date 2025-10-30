@@ -1,52 +1,49 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
+import { listDevices, registerDevice } from "../api/devices"
 
 export default function Devices() {
   const [selectedDevice, setSelectedDevice] = useState(null)
-  const [devices] = useState([
-    {
-      id: "dev-001",
-      name: "server-prod-01",
-      platform: "Linux Ubuntu 22.04",
-      status: "online",
-      lastSeen: "2 minutes ago",
-      version: "v1.2.3",
-      monitoredPaths: ["/var/log/nginx", "/var/log/app"],
-      lastHash: "0x7f3a2b...",
-      lastAnchor: "Batch #1247",
-      storageSize: "1.2 GB",
-      logsCount: 15420,
-    },
-    {
-      id: "dev-002",
-      name: "server-prod-02",
-      platform: "Linux Ubuntu 22.04",
-      status: "online",
-      lastSeen: "5 minutes ago",
-      version: "v1.2.3",
-      monitoredPaths: ["/var/log/nginx", "/var/log/mysql"],
-      lastHash: "0x9c4d1e...",
-      lastAnchor: "Batch #1246",
-      storageSize: "890 MB",
-      logsCount: 12305,
-    },
-    {
-      id: "dev-003",
-      name: "server-staging-01",
-      platform: "Linux Debian 11",
-      status: "offline",
-      lastSeen: "2 hours ago",
-      version: "v1.2.2",
-      monitoredPaths: ["/var/log/app"],
-      lastHash: "0x2a8f5c...",
-      lastAnchor: "Batch #1240",
-      storageSize: "450 MB",
-      logsCount: 8920,
-    },
-  ])
+  const [devices, setDevices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await listDevices()
+        if (!mounted) return
+        setDevices(
+          Array.isArray(res)
+            ? res.map((d) => ({
+                id: d.device_id,
+                name: d.name,
+                platform: "Unknown platform",
+                status: "online",
+                lastSeen: "—",
+                version: "—",
+                monitoredPaths: [],
+                lastHash: "—",
+                lastAnchor: "—",
+                storageSize: "—",
+                logsCount: 0,
+              }))
+            : []
+        )
+      } catch (err) {
+        setError(err.message || "Failed to load devices")
+      } finally {
+        setLoading(false)
+      }
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   return (
     <div className="space-y-8">
@@ -92,7 +89,9 @@ export default function Devices() {
 
       {/* Devices List */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {devices.map((device, index) => (
+        {loading && <div className="text-gray-400">Loading devices...</div>}
+        {error && <div className="text-red-400">{error}</div>}
+        {!loading && !error && devices.map((device, index) => (
           <Card
             key={device.id}
             animated
