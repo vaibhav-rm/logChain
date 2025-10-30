@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
+import { User, Server, Bell, Link2, KeyRound, CreditCard, Download } from "lucide-react"
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState("account")
@@ -23,12 +24,12 @@ export default function Settings() {
   })
 
   const tabs = [
-    { id: "account", label: "Account", icon: "👤" },
-    { id: "devices", label: "Device Setup", icon: "💻" },
-    { id: "notifications", label: "Notifications", icon: "🔔" },
-    { id: "blockchain", label: "Blockchain", icon: "⛓️" },
-    { id: "api", label: "API Keys", icon: "🔑" },
-    { id: "billing", label: "Billing", icon: "💳" },
+    { id: "account", label: "Account", icon: <User className="w-4 h-4" /> },
+    { id: "devices", label: "Device Setup", icon: <Server className="w-4 h-4" /> },
+    { id: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
+    { id: "blockchain", label: "Blockchain", icon: <Link2 className="w-4 h-4" /> },
+    { id: "api", label: "API Keys", icon: <KeyRound className="w-4 h-4" /> },
+    { id: "billing", label: "Billing", icon: <CreditCard className="w-4 h-4" /> },
   ]
 
   const handleInputChange = (e) => {
@@ -58,7 +59,7 @@ export default function Settings() {
                 activeTab === tab.id ? "bg-gradient-primary text-white" : "bg-dark-700 text-gray-400 hover:text-white"
               }`}
             >
-              <span>{tab.icon}</span>
+              <span className="inline-flex items-center">{tab.icon}</span>
               <span>{tab.label}</span>
             </button>
           ))}
@@ -169,7 +170,7 @@ export default function Settings() {
               <div className="grid md:grid-cols-3 gap-4">
                 {["Linux", "macOS", "Windows"].map((os) => (
                   <button key={os} className="btn-secondary flex items-center justify-center gap-2">
-                    <span>📥</span>
+                    <Download className="w-4 h-4" />
                     <span>Download for {os}</span>
                   </button>
                 ))}

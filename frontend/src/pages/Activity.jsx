@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Link2, Check, Upload, Server, User, Clock } from "lucide-react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
 
@@ -110,11 +111,11 @@ export default function Activity() {
   ])
 
   const eventIcons = {
-    anchor: "⛓️",
-    verification: "✓",
-    upload: "📤",
-    device: "💻",
-    user: "👤",
+    anchor: <Link2 className="w-5 h-5 text-white" />,
+    verification: <Check className="w-5 h-5 text-white" />,
+    upload: <Upload className="w-5 h-5 text-white" />,
+    device: <Server className="w-5 h-5 text-white" />,
+    user: <User className="w-5 h-5 text-white" />,
   }
 
   const filteredActivities = activities.filter((activity) => {
@@ -209,9 +210,9 @@ export default function Activity() {
 
                 {/* Metadata */}
                 <div className="flex flex-wrap gap-4 text-xs text-gray-500 mt-3">
-                  <span>⏰ {activity.timestamp}</span>
-                  {activity.device && <span>💻 {activity.device}</span>}
-                  <span>👤 {activity.user}</span>
+                  <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {activity.timestamp}</span>
+                  {activity.device && <span className="inline-flex items-center gap-1"><Server className="w-3.5 h-3.5"/> {activity.device}</span>}
+                  <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5"/> {activity.user}</span>
                 </div>
 
                 {/* Additional Details */}

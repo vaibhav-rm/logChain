@@ -1,6 +1,9 @@
-import { Outlet, NavLink } from "react-router-dom"
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom"
+import { getAuthToken, setAuthToken } from "../api/config"
 
 export default function Layout() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const navItems = [
     { path: "/dashboard", label: "Dashboard", icon: "📊" },
     { path: "/devices", label: "My Devices", icon: "💻" },
@@ -9,6 +12,11 @@ export default function Layout() {
     { path: "/activity", label: "Activity", icon: "📋" },
     { path: "/settings", label: "Settings", icon: "⚙️" },
   ]
+
+  const isAuthed = !!getAuthToken()
+  if (!isAuthed && location.pathname !== "/login" && location.pathname !== "/signup") {
+    navigate("/login")
+  }
 
   return (
     <div className="min-h-screen bg-gradient-dark">
@@ -37,7 +45,15 @@ export default function Layout() {
               ))}
             </nav>
 
-            <button className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Logout</button>
+            <button
+              className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+              onClick={() => {
+                setAuthToken("")
+                navigate("/login")
+              }}
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>

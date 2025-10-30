@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
-import { listBatches } from "../api/batches"
+import { listBatches, anchorBatch, verifyBatch } from "../api/batches"
 
 export default function Logs() {
   const [selectedBatch, setSelectedBatch] = useState(null)
@@ -12,34 +12,39 @@ export default function Logs() {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [actionMsg, setActionMsg] = useState("")
+
+  const fetchBatches = async () => {
+    try {
+      setLoading(true)
+      const res = await listBatches()
+      setBatches(
+        Array.isArray(res)
+          ? res.map((b) => ({
+              id: b.id,
+              batchId: b.batch_id || "—",
+              merkleRoot: b.merkle_root,
+              timestamp: "—",
+              size: b.size || 0,
+              device: b.device_id || "—",
+              status: b.anchored === 1 ? "anchored" : "pending",
+              txHash: b.tx_hash,
+              blockNumber: b.tx_block,
+              ipfsCid: b.ipfs_cid || "—",
+              logsCount: b.size || 0,
+            }))
+          : []
+      )
+      setError("")
+    } catch (err) {
+      setError(err.message || "Failed to load batches")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    ;(async () => {
-      try {
-        const res = await listBatches()
-        setBatches(
-          Array.isArray(res)
-            ? res.map((b) => ({
-                id: b.id,
-                batchId: b.batch_id || "—",
-                merkleRoot: b.merkle_root,
-                timestamp: "—",
-                size: b.size || 0,
-                device: b.device_id || "—",
-                status: b.anchored === 1 ? "anchored" : "pending",
-                txHash: b.tx_hash,
-                blockNumber: b.tx_block,
-                ipfsCid: b.ipfs_cid || "—",
-                logsCount: b.size || 0,
-              }))
-            : []
-        )
-      } catch (err) {
-        setError(err.message || "Failed to load batches")
-      } finally {
-        setLoading(false)
-      }
-    })()
+    fetchBatches()
   }, [])
 
   const filteredBatches = batches.filter((batch) => {
@@ -56,6 +61,9 @@ export default function Logs() {
       <div>
         <h1 className="text-3xl font-bold text-white mb-2">Log Batches</h1>
         <p className="text-gray-400">View and manage anchored log batches</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button className="btn-secondary" onClick={fetchBatches}>Refresh</button>
       </div>
 
       {/* Filters */}
@@ -91,6 +99,18 @@ export default function Logs() {
       {/* Batches Table */}
       <Card>
         <div className="overflow-x-auto">
+          {loading && <div className="text-gray-400 p-4">Loading batches...</div>}
+          {error && (
+            <div className="text-red-400 p-4">
+              {error}
+              {(error.toLowerCase().includes("401") || error.toLowerCase().includes("unauthorized")) && (
+                <span className="block text-gray-400">You may need to log in again.</span>
+              )}
+            </div>
+          )}
+          {!loading && !error && batches.length === 0 && (
+            <div className="text-gray-400 p-4">No batches yet. Once your agent sends logs, they will appear here.</div>
+          )}
           <table className="w-full">
             <thead>
               <tr className="border-b border-dark-600">
@@ -127,17 +147,49 @@ export default function Logs() {
                     </Badge>
                   </td>
                   <td className="py-4 px-4">
-                    <button
-                      onClick={() => setSelectedBatch(batch)}
-                      className="text-neon-indigo hover:text-neon-purple transition-colors text-sm font-medium"
-                    >
-                      View Details
-                    </button>
+                    <div className="flex gap-3 items-center">
+                      <button
+                        onClick={() => setSelectedBatch(batch)}
+                        className="text-neon-indigo hover:text-neon-purple transition-colors text-sm font-medium"
+                      >
+                        Details
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            setActionMsg("")
+                            const res = await anchorBatch(batch.id)
+                            setActionMsg(`Anchored: ${res.tx_hash || "ok"}`)
+                            await fetchBatches()
+                          } catch (e) {
+                            setActionMsg(`Anchor failed: ${e.message}`)
+                          }
+                        }}
+                        className="text-sm btn-secondary"
+                      >
+                        Anchor
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            setActionMsg("")
+                            const res = await verifyBatch(batch.id)
+                            setActionMsg(res.anchored_onchain ? "Verified on-chain" : "Not found on-chain")
+                          } catch (e) {
+                            setActionMsg(`Verify failed: ${e.message}`)
+                          }
+                        }}
+                        className="text-sm btn-secondary"
+                      >
+                        Verify
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {actionMsg && <div className="p-3 text-sm text-gray-300">{actionMsg}</div>}
         </div>
       </Card>
 

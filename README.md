@@ -405,11 +405,7 @@ This will deploy the contract and save the address.
 
 This project is open source and available under the MIT License.
 
-## 👤 Author
-
-**Vaibhav**
-
-## 🙏 Acknowledgments
+## 🙏 Acknowledgments   
 
 - FastAPI for the excellent Python web framework
 - React team for the powerful UI library

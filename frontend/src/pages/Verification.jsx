@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { FileText, PenLine, Upload, CheckCircle2, XCircle } from "lucide-react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
 
@@ -50,7 +51,7 @@ export default function Verification() {
                 : "border-dark-600 hover:border-dark-500"
             }`}
           >
-            <div className="text-3xl mb-2">📄</div>
+            <div className="text-3xl mb-2"><FileText className="w-7 h-7" /></div>
             <h3 className="text-white font-semibold mb-1">Upload Log File</h3>
             <p className="text-sm text-gray-400">Verify an entire log file</p>
           </button>
@@ -62,7 +63,7 @@ export default function Verification() {
                 : "border-dark-600 hover:border-dark-500"
             }`}
           >
-            <div className="text-3xl mb-2">📝</div>
+            <div className="text-3xl mb-2"><PenLine className="w-7 h-7" /></div>
             <h3 className="text-white font-semibold mb-1">Single Log Entry</h3>
             <p className="text-sm text-gray-400">Verify a specific log line</p>
           </button>
@@ -77,7 +78,7 @@ export default function Verification() {
 
         {verificationMethod === "file" ? (
           <div className="border-2 border-dashed border-dark-600 rounded-lg p-12 text-center hover:border-neon-indigo/50 transition-colors cursor-pointer">
-            <div className="text-5xl mb-4">📤</div>
+            <div className="text-5xl mb-4"><Upload className="w-10 h-10 inline" /></div>
             <p className="text-white font-medium mb-2">Drop your log file here or click to browse</p>
             <p className="text-sm text-gray-400">Supports .log, .txt files up to 100MB</p>
             <input type="file" className="hidden" accept=".log,.txt" />
@@ -120,13 +121,17 @@ export default function Verification() {
         <Card animated className="animate-pulse-glow">
           <div className="text-center mb-6">
             <div
-              className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center text-4xl ${
+              className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
                 verificationResult.status === "verified"
                   ? "bg-green-500/20 border-2 border-green-500"
                   : "bg-red-500/20 border-2 border-red-500"
               }`}
             >
-              {verificationResult.status === "verified" ? "✓" : "✗"}
+              {verificationResult.status === "verified" ? (
+                <CheckCircle2 className="w-10 h-10 text-green-400" />
+              ) : (
+                <XCircle className="w-10 h-10 text-red-400" />
+              )}
             </div>
             <h2 className="text-3xl font-bold text-white mb-2">
               {verificationResult.status === "verified" ? "Verification Successful" : "Verification Failed"}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Link2, Server, Hourglass, Check, Upload, CheckCircle2 } from "lucide-react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
 
@@ -50,28 +51,28 @@ export default function Dashboard() {
       title: "Last Anchored",
       value: "2 min ago",
       subtitle: "Batch #1247",
-      icon: "⛓️",
+      icon: <Link2 className="w-7 h-7 text-neon-indigo" />,
       status: "verified",
     },
     {
       title: "Devices Online",
       value: "12/15",
       subtitle: "3 offline",
-      icon: "💻",
+      icon: <Server className="w-7 h-7 text-neon-indigo" />,
       status: "online",
     },
     {
       title: "Pending Anchors",
       value: "3",
       subtitle: "Queued for next batch",
-      icon: "⏳",
+      icon: <Hourglass className="w-7 h-7 text-neon-indigo" />,
       status: "offline",
     },
     {
       title: "Last Verification",
       value: "Success",
       subtitle: "8 minutes ago",
-      icon: "✓",
+      icon: <Check className="w-7 h-7 text-neon-indigo" />,
       status: "verified",
     },
   ]
@@ -131,8 +132,14 @@ export default function Dashboard() {
                            hover:border-neon-indigo/30 transition-all duration-200 animate-slide-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="flex-shrink-0 w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center text-lg">
-                  {event.type === "anchor" ? "⛓️" : event.type === "upload" ? "📤" : "✓"}
+                <div className="flex-shrink-0 w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
+                  {event.type === "anchor" ? (
+                    <Link2 className="w-5 h-5 text-white" />
+                  ) : event.type === "upload" ? (
+                    <Upload className="w-5 h-5 text-white" />
+                  ) : (
+                    <Check className="w-5 h-5 text-white" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white mb-1">{event.message}</p>
@@ -209,9 +216,9 @@ export default function Dashboard() {
                               }`}
                 >
                   {point.status === "verified" ? (
-                    <span className="text-neon-cyan text-xl">✓</span>
+                    <Check className="w-5 h-5 text-neon-cyan" />
                   ) : (
-                    <span className="text-gray-500 text-xl">⏳</span>
+                    <Hourglass className="w-5 h-5 text-gray-500" />
                   )}
                 </div>
                 <span className="text-xs font-medium text-gray-400 mb-1">{point.time}</span>

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import { Lock, Link2, Zap } from "lucide-react"
 
 export default function Landing() {
   return (
@@ -52,21 +53,21 @@ export default function Landing() {
       {/* Features Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
         <div className="grid md:grid-cols-3 gap-8">
-          {[
+          {[ 
             {
               title: "Privacy First",
               description: "Raw logs never leave your device. Only cryptographic hashes are sent to the cloud.",
-              icon: "🔒",
+              icon: <Lock className="w-8 h-8" />,
             },
             {
               title: "Blockchain Anchored",
               description: "Merkle roots anchored on-chain provide immutable proof of log integrity.",
-              icon: "⛓️",
+              icon: <Link2 className="w-8 h-8" />,
             },
             {
               title: "Real-Time Verification",
               description: "Instantly verify log authenticity and detect any tampering attempts.",
-              icon: "⚡",
+              icon: <Zap className="w-8 h-8" />,
             },
           ].map((feature, index) => (
             <div

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Server, CheckCircle2, AlertTriangle, RefreshCw, Plus } from "lucide-react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
 import { listDevices, registerDevice } from "../api/devices"
@@ -10,40 +11,58 @@ export default function Devices() {
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [showAdd, setShowAdd] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ device_id: "", name: "" })
+
+  const fetchDevices = async () => {
+    try {
+      setLoading(true)
+      const res = await listDevices()
+      setDevices(
+        Array.isArray(res)
+          ? res.map((d) => ({
+              id: d.device_id,
+              name: d.name,
+              platform: "Unknown platform",
+              status: "online",
+              lastSeen: "—",
+              version: "—",
+              monitoredPaths: [],
+              lastHash: "—",
+              lastAnchor: "—",
+              storageSize: "—",
+              logsCount: 0,
+            }))
+          : []
+      )
+      setError("")
+    } catch (err) {
+      setError(err.message || "Failed to load devices")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const res = await listDevices()
-        if (!mounted) return
-        setDevices(
-          Array.isArray(res)
-            ? res.map((d) => ({
-                id: d.device_id,
-                name: d.name,
-                platform: "Unknown platform",
-                status: "online",
-                lastSeen: "—",
-                version: "—",
-                monitoredPaths: [],
-                lastHash: "—",
-                lastAnchor: "—",
-                storageSize: "—",
-                logsCount: 0,
-              }))
-            : []
-        )
-      } catch (err) {
-        setError(err.message || "Failed to load devices")
-      } finally {
-        setLoading(false)
-      }
-    })()
-    return () => {
-      mounted = false
-    }
+    fetchDevices()
   }, [])
+
+  const onAddDevice = async (e) => {
+    e.preventDefault()
+    if (!form.device_id || !form.name) return
+    try {
+      setSaving(true)
+      await registerDevice({ device_id: form.device_id, name: form.name })
+      setShowAdd(false)
+      setForm({ device_id: "", name: "" })
+      await fetchDevices()
+    } catch (err) {
+      setError(err.message || "Failed to register device")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -53,7 +72,10 @@ export default function Devices() {
           <h1 className="text-3xl font-bold text-white mb-2">My Devices</h1>
           <p className="text-gray-400">Manage your LogChain client agents</p>
         </div>
-        <button className="btn-primary">Add Device</button>
+        <div className="flex items-center gap-3">
+          <button className="btn-secondary" onClick={fetchDevices}><RefreshCw className="w-4 h-4 inline mr-2"/>Refresh</button>
+          <button className="btn-primary" onClick={() => setShowAdd(true)}><Plus className="w-4 h-4 inline mr-2"/>Add Device</button>
+        </div>
       </div>
 
       {/* Stats Overview */}
@@ -64,7 +86,7 @@ export default function Devices() {
               <p className="text-sm text-gray-400 mb-1">Total Devices</p>
               <p className="text-3xl font-bold text-white">{devices.length}</p>
             </div>
-            <div className="text-4xl">💻</div>
+            <Server className="w-8 h-8 text-neon-indigo" />
           </div>
         </Card>
         <Card animated style={{ animationDelay: "100ms" }}>
@@ -73,7 +95,7 @@ export default function Devices() {
               <p className="text-sm text-gray-400 mb-1">Online</p>
               <p className="text-3xl font-bold text-green-400">{devices.filter((d) => d.status === "online").length}</p>
             </div>
-            <div className="text-4xl">✓</div>
+            <CheckCircle2 className="w-8 h-8 text-green-400" />
           </div>
         </Card>
         <Card animated style={{ animationDelay: "200ms" }}>
@@ -82,7 +104,7 @@ export default function Devices() {
               <p className="text-sm text-gray-400 mb-1">Offline</p>
               <p className="text-3xl font-bold text-red-400">{devices.filter((d) => d.status === "offline").length}</p>
             </div>
-            <div className="text-4xl">⚠️</div>
+            <AlertTriangle className="w-8 h-8 text-red-400" />
           </div>
         </Card>
       </div>
@@ -91,6 +113,11 @@ export default function Devices() {
       <div className="grid lg:grid-cols-2 gap-6">
         {loading && <div className="text-gray-400">Loading devices...</div>}
         {error && <div className="text-red-400">{error}</div>}
+        {!loading && !error && devices.length === 0 && (
+          <Card className="col-span-full">
+            <div className="text-gray-400">No devices yet. Click "Add Device" to register your first device.</div>
+          </Card>
+        )}
         {!loading && !error && devices.map((device, index) => (
           <Card
             key={device.id}
@@ -101,8 +128,8 @@ export default function Devices() {
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center text-xl">
-                  💻
+                <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
+                  <Server className="w-6 h-6 text-white" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white">{device.name}</h3>
@@ -152,8 +179,8 @@ export default function Devices() {
           >
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-14 h-14 bg-gradient-primary rounded-lg flex items-center justify-center text-2xl">
-                  💻
+                <div className="w-14 h-14 bg-gradient-primary rounded-lg flex items-center justify-center">
+                  <Server className="w-7 h-7 text-white" />
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-white">{selectedDevice.name}</h2>
@@ -235,6 +262,52 @@ export default function Devices() {
                 <button className="btn-secondary">Download Logs</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Device Modal */}
+      {showAdd && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowAdd(false)}
+        >
+          <div
+            className="glass-card max-w-md w-full animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">Add Device</h2>
+              <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-white transition-colors text-2xl">×</button>
+            </div>
+            <form onSubmit={onAddDevice} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Device ID</label>
+                <input
+                  type="text"
+                  value={form.device_id}
+                  onChange={(e) => setForm((f) => ({ ...f, device_id: e.target.value }))}
+                  className="input-field"
+                  placeholder="e.g. server-prod-01"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Name</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  className="input-field"
+                  placeholder="Friendly name"
+                  required
+                />
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button type="button" className="btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
