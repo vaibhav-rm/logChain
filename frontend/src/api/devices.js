@@ -1,7 +1,8 @@
 import { apiFetch } from "./config";
 
-export async function listDevices() {
-  return apiFetch("/devices", { method: "GET" });
+export async function listDevices(includeBatchInfo = false) {
+  const params = includeBatchInfo ? "?include_batch_info=true" : ""
+  return apiFetch(`/devices${params}`, { method: "GET" });
 }
 
 export async function registerDevice({ device_id, name }) {

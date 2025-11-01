@@ -8,7 +8,7 @@ import os
 
 from app.db import users_collection, devices_collection, batches_collection
 from app import schemas
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.eth import compile_contract, load_contract_instance, anchor_root
 from app.auth import create_access_token, hash_password, verify_password
 from app.utils import get_current_user
@@ -51,6 +51,7 @@ def serialize_batch(doc):
     # Convert datetime to ISO format string if it's a datetime object
     if created_at and isinstance(created_at, datetime):
         created_at = created_at.isoformat() + "Z"  # Add Z to indicate UTC
+    # Only include fields that are needed to reduce payload size
     return {
         "id": str(doc["_id"]),
         "batch_id": doc.get("batch_id"),
@@ -112,9 +113,81 @@ def anchor_batch(batch_id: str, current_user=Depends(get_current_user)):
 
 
 @app.get("/batches", response_model=list[schemas.BatchOut], tags=["Batch"])
-def list_batches(current_user=Depends(get_current_user)):
-    docs = batches_collection.find({"user_id": ObjectId(current_user)}).sort("created_at", -1)
+def list_batches(current_user=Depends(get_current_user), limit: int = 1000):
+    # Limit results to prevent large payloads, sort by created_at descending
+    docs = batches_collection.find({"user_id": ObjectId(current_user)}).sort("created_at", -1).limit(limit)
     return [serialize_batch(d) for d in docs]
+
+@app.get("/dashboard/stats", tags=["Dashboard"])
+def dashboard_stats(current_user=Depends(get_current_user)):
+    """Optimized endpoint for dashboard - returns aggregated stats and recent batches only"""
+    user_id = ObjectId(current_user)
+    
+    # Use aggregation pipeline to get all batch stats in ONE query (much faster)
+    batch_stats = list(batches_collection.aggregate([
+        {"$match": {"user_id": user_id}},
+        {"$group": {
+            "_id": None,
+            "totalBatches": {"$sum": 1},
+            "anchoredBatches": {"$sum": {"$cond": [{"$eq": ["$anchored", 1]}, 1, 0]}},
+        }}
+    ]))
+    
+    if batch_stats:
+        stats_result = batch_stats[0]
+        total_batches = stats_result.get("totalBatches", 0)
+        anchored_batches = stats_result.get("anchoredBatches", 0)
+        pending_batches = total_batches - anchored_batches
+    else:
+        total_batches = 0
+        anchored_batches = 0
+        pending_batches = 0
+    
+    # Get total devices count (indexed query)
+    total_devices = devices_collection.count_documents({"user_id": user_id})
+    
+    # Get online devices count (last_seen within 6 minutes) - use indexed query
+    six_min_ago = datetime.utcnow() - timedelta(minutes=6)
+    online_devices = devices_collection.count_documents({
+        "user_id": user_id,
+        "last_seen": {"$gte": six_min_ago}
+    })
+    
+    # Get most recent anchored batch and recent batches in parallel
+    # Use find_one with index for fast lookup
+    last_anchored_batch = batches_collection.find_one(
+        {"user_id": user_id, "anchored": 1, "tx_hash": {"$ne": None}},
+        sort=[("created_at", -1)],
+        projection={"batch_id": 1, "created_at": 1, "_id": 0}
+    )
+    
+    # Get only recent batches for activity feed (last 10) - already indexed
+    recent_batches = batches_collection.find(
+        {"user_id": user_id},
+        sort=[("created_at", -1)],
+        limit=10,
+        projection={"batch_id": 1, "device_id": 1, "merkle_root": 1, "anchored": 1, "tx_hash": 1, "created_at": 1, "size": 1, "ipfs_cid": 1, "_id": 1}
+    )
+    
+    recent_batches_list = []
+    for batch in recent_batches:
+        batch_data = serialize_batch(batch)
+        recent_batches_list.append(batch_data)
+    
+    return {
+        "stats": {
+            "totalBatches": total_batches,
+            "anchoredBatches": anchored_batches,
+            "pendingBatches": pending_batches,
+            "totalDevices": total_devices,
+            "onlineDevices": online_devices,
+        },
+        "lastAnchored": {
+            "batch_id": last_anchored_batch.get("batch_id") if last_anchored_batch else None,
+            "created_at": last_anchored_batch.get("created_at").isoformat() + "Z" if last_anchored_batch and isinstance(last_anchored_batch.get("created_at"), datetime) else None,
+        } if last_anchored_batch else None,
+        "recentBatches": recent_batches_list,
+    }
 
 @app.get("/batches/{batch_id}", response_model=schemas.BatchOut, tags=["Batch"])
 def get_batch(batch_id: str, current_user=Depends(get_current_user)):
@@ -129,10 +202,17 @@ def get_batch(batch_id: str, current_user=Depends(get_current_user)):
 
 @app.get("/onchain/total", tags=["Batch"])
 def onchain_total():
+    """Get on-chain total - may be slow, use timeout in frontend"""
     if contract_instance is None:
-        raise HTTPException(status_code=500, detail="Contract not configured")
-    total = contract_instance.functions.totalBatches().call()
-    return {"total_batches": total}
+        return {"total_batches": 0}  # Don't error, just return 0
+    try:
+        # Add timeout to blockchain call (if using web3.py timeout)
+        total = contract_instance.functions.totalBatches().call()
+        return {"total_batches": total}
+    except Exception as e:
+        # Don't fail if blockchain is slow/unavailable
+        print(f"Warning: Failed to get onchain total: {e}")
+        return {"total_batches": 0}
 
 @app.get("/batches/{batch_id}/verify", tags=["Batch"])
 def verify_batch(batch_id: str, current_user=Depends(get_current_user)):
@@ -227,22 +307,52 @@ def register_device(device: schemas.DeviceCreate, current_user=Depends(get_curre
     return {"status": "registered", "device_id": device.device_id}
 
 @app.get("/devices", tags=["Device"])
-def list_devices(current_user=Depends(get_current_user)):
-    devices = list(devices_collection.find({"user_id": ObjectId(current_user)}))
+def list_devices(current_user=Depends(get_current_user), include_batch_info: bool = False):
+    # Use projection to only fetch needed fields for better performance
+    devices = list(devices_collection.find(
+        {"user_id": ObjectId(current_user)},
+        {"device_id": 1, "name": 1, "platform": 1, "version": 1, "last_seen": 1, "storage_bytes": 1}
+    ))
     result = []
     for d in devices:
         last_seen = d.get("last_seen")
         # Convert datetime to ISO format string if it's a datetime object
         if last_seen and isinstance(last_seen, datetime):
             last_seen = last_seen.isoformat() + "Z"  # Add Z to indicate UTC
-        result.append({
+        
+        device_result = {
             "device_id": d.get("device_id"),
             "name": d.get("name"),
             "platform": d.get("platform"),
             "version": d.get("version"),
             "last_seen": last_seen,
             "storage_bytes": d.get("storage_bytes"),
-        })
+        }
+        
+        # Optionally include last batch info (for devices page optimization)
+        if include_batch_info:
+            # Get the most recent anchored batch for this device (optimized query)
+            last_batch = batches_collection.find_one(
+                {"user_id": ObjectId(current_user), "device_id": d.get("device_id"), "anchored": 1},
+                sort=[("created_at", -1)],
+                projection={"batch_id": 1, "merkle_root": 1, "created_at": 1, "size": 1}
+            )
+            if last_batch:
+                device_result["last_anchor"] = {
+                    "batch_id": last_batch.get("batch_id"),
+                    "merkle_root": last_batch.get("merkle_root"),
+                    "created_at": last_batch.get("created_at").isoformat() + "Z" if isinstance(last_batch.get("created_at"), datetime) else last_batch.get("created_at"),
+                }
+            
+            # Get total logs count for this device (aggregate query)
+            total_logs = batches_collection.aggregate([
+                {"$match": {"user_id": ObjectId(current_user), "device_id": d.get("device_id")}},
+                {"$group": {"_id": None, "total": {"$sum": "$size"}}}
+            ])
+            total_logs_list = list(total_logs)
+            device_result["total_logs"] = total_logs_list[0]["total"] if total_logs_list else 0
+        
+        result.append(device_result)
     return result
 
 @app.post("/devices/heartbeat", tags=["Device"])

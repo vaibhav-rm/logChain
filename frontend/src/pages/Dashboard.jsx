@@ -4,13 +4,11 @@ import { useState, useEffect } from "react"
 import { Link2, Server, Hourglass, Check, Upload, CheckCircle2, RefreshCw } from "lucide-react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
-import { listBatches, getOnchainTotal } from "../api/batches"
-import { listDevices } from "../api/devices"
+import { getOnchainTotal, getDashboardStats } from "../api/batches"
 
 export default function Dashboard() {
   const [liveEvents, setLiveEvents] = useState([])
   const [batches, setBatches] = useState([])
-  const [devices, setDevices] = useState([])
   const [stats, setStats] = useState({
     totalBatches: 0,
     anchoredBatches: 0,
@@ -21,94 +19,43 @@ export default function Dashboard() {
   })
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [lastAnchoredData, setLastAnchoredData] = useState(null)
 
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [batchesRes, devicesRes, onchainRes] = await Promise.all([
-        listBatches().catch(() => []),
-        listDevices().catch(() => []),
-        getOnchainTotal().catch(() => ({ total_batches: 0 })),
-      ])
+      
+      // Fetch dashboard stats first (fast) - don't wait for blockchain
+      const dashboardData = await getDashboardStats().catch(() => ({ 
+        stats: {}, 
+        lastAnchored: null, 
+        recentBatches: [] 
+      }))
 
-      const batchesData = Array.isArray(batchesRes) ? batchesRes : []
-      const devicesData = Array.isArray(devicesRes) ? devicesRes : []
+      const dashboardStats = dashboardData.stats || {}
+      const recentBatches = Array.isArray(dashboardData.recentBatches) ? dashboardData.recentBatches : []
 
-      // Sort batches by created_at desc (most recent first)
-      batchesData.sort((a, b) => {
-        let aTime = 0
-        let bTime = 0
-        try {
-          if (a.created_at) {
-            let aStr = a.created_at
-            if (typeof aStr === 'string' && !aStr.endsWith('Z') && !aStr.includes('+') && !aStr.includes('-', 10)) {
-              aStr = aStr + 'Z'
-            }
-            aTime = new Date(aStr).getTime()
-          }
-          if (b.created_at) {
-            let bStr = b.created_at
-            if (typeof bStr === 'string' && !bStr.endsWith('Z') && !bStr.includes('+') && !bStr.includes('-', 10)) {
-              bStr = bStr + 'Z'
-            }
-            bTime = new Date(bStr).getTime()
-          }
-        } catch (e) {
-          console.error("Error parsing batch dates:", e, a.created_at, b.created_at)
-        }
-        return bTime - aTime
-      })
+      // Set batches immediately (only recent ones for display)
+      setBatches(recentBatches)
 
-      setBatches(batchesData)
-      setDevices(devicesData)
+      // Update last anchored if provided
+      if (dashboardData.lastAnchored) {
+        setLastAnchoredData(dashboardData.lastAnchored)
+      }
 
-      // Calculate stats
-      const anchored = batchesData.filter(b => b.anchored === 1).length
-      const pending = batchesData.filter(b => b.anchored === 0).length
-      const now = Date.now()
-      const onlineDevices = devicesData.filter(d => {
-        if (!d.last_seen) return false
-        try {
-          // Handle both string and object dates, ensure UTC handling
-          let lastSeenTime
-          if (typeof d.last_seen === 'string') {
-            // Ensure UTC format
-            let dateStr = d.last_seen
-            if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-              dateStr = dateStr + 'Z'  // Assume UTC if no timezone
-            }
-            lastSeenTime = new Date(dateStr).getTime()
-          } else if (d.last_seen && typeof d.last_seen === 'object') {
-            // MongoDB datetime object
-            lastSeenTime = new Date(d.last_seen.$date || d.last_seen.isoDate || d.last_seen).getTime()
-          } else {
-            lastSeenTime = new Date(d.last_seen).getTime()
-          }
-          if (isNaN(lastSeenTime)) {
-            console.warn("Invalid last_seen for device:", d.device_id, d.last_seen)
-            return false
-          }
-          // Device is online if last_seen is within 6 minutes (allowing for heartbeat interval of 30s + network delay)
-          const isOnline = (now - lastSeenTime) < 6 * 60 * 1000 // 6 minutes
-          return isOnline
-        } catch (e) {
-          console.error("Error parsing last_seen for device:", d.device_id, e, d.last_seen)
-          return false
-        }
-      }).length
-
+      // Set stats immediately (don't wait for blockchain)
       setStats({
-        totalBatches: batchesData.length,
-        anchoredBatches: anchored,
-        pendingBatches: pending,
-        totalDevices: devicesData.length,
-        onlineDevices,
-        onchainTotal: onchainRes.total_batches || 0,
+        totalBatches: dashboardStats.totalBatches || 0,
+        anchoredBatches: dashboardStats.anchoredBatches || 0,
+        pendingBatches: dashboardStats.pendingBatches || 0,
+        totalDevices: dashboardStats.totalDevices || 0,
+        onlineDevices: dashboardStats.onlineDevices || 0,
+        onchainTotal: 0, // Will update when blockchain call completes
       })
 
-      // Generate live events from batches
+      // Generate live events from recent batches (already sorted by backend)
       const events = []
-      batchesData.slice(0, 10).forEach(batch => {
+      recentBatches.forEach(batch => {
         if (batch.anchored === 1 && batch.tx_hash) {
           events.push({
             id: batch.id,
@@ -131,9 +78,25 @@ export default function Dashboard() {
       })
       setLiveEvents(events)
       setLastUpdate(new Date())
+      setLoading(false) // Mark as loaded even if blockchain call is still pending
+      
+      // Fetch blockchain data separately (may be slow) - don't block UI
+      Promise.race([
+        getOnchainTotal(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000)) // 5 second timeout
+      ])
+        .then(onchainRes => {
+          setStats(prev => ({
+            ...prev,
+            onchainTotal: onchainRes.total_batches || 0,
+          }))
+        })
+        .catch(() => {
+          // Silently fail - blockchain data is not critical for dashboard display
+          console.warn("Failed to fetch onchain total (may be slow or unavailable)")
+        })
     } catch (err) {
       console.error("Error fetching dashboard data:", err)
-    } finally {
       setLoading(false)
     }
   }
@@ -180,8 +143,7 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
-  // Find the most recently anchored batch (anchored batches sorted by created_at desc)
-  const lastAnchored = batches.find(b => b.anchored === 1 && b.tx_hash)
+  const lastAnchored = lastAnchoredData || batches.find(b => b.anchored === 1 && b.tx_hash)
   const offlineDevices = stats.totalDevices - stats.onlineDevices
 
   const summaryCards = [

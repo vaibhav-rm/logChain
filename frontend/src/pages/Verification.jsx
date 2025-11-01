@@ -319,7 +319,39 @@ export default function Verification() {
             >
               Verify Another
             </button>
-            <button className="btn-primary flex-1">Download Proof</button>
+            <button 
+              onClick={() => {
+                if (!verificationResult) return
+                
+                // Create proof data object
+                const proofData = {
+                  status: verificationResult.status,
+                  verifiedAt: verificationResult.timestamp,
+                  merkleRoot: verificationResult.merkleRoot,
+                  batchId: verificationResult.batchId,
+                  proofSteps: verificationResult.proofSteps || [],
+                  verificationMethod: verificationMethod,
+                  logSource: verificationMethod === "file" 
+                    ? (selectedFile ? selectedFile.name : "unknown")
+                    : "manual_entry",
+                }
+                
+                // Create and download JSON file
+                const dataStr = JSON.stringify(proofData, null, 2)
+                const dataBlob = new Blob([dataStr], { type: 'application/json' })
+                const url = URL.createObjectURL(dataBlob)
+                const link = document.createElement('a')
+                link.href = url
+                link.download = `verification-proof-${verificationResult.batchId || Date.now()}.json`
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+                URL.revokeObjectURL(url)
+              }}
+              className="btn-primary flex-1"
+            >
+              Download Proof
+            </button>
           </div>
         </Card>
       )}

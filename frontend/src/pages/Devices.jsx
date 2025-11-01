@@ -20,36 +20,27 @@ export default function Devices() {
   const fetchDevices = async () => {
     try {
       setLoading(true)
-      const res = await listDevices()
+      // Request devices with batch info included to avoid separate API call
+      const res = await listDevices(true) // Pass true to include batch info
       const devicesData = Array.isArray(res) ? res : []
       
-      // Get batches to find last anchor for each device
+      // Build batchesByDevice from included batch info
       let batchesByDevice = {}
-      try {
-        const { listBatches } = await import("../api/batches")
-        const batches = await listBatches()
-        if (Array.isArray(batches)) {
-          batches.forEach(batch => {
-            const deviceId = batch.device_id
-            if (deviceId) {
-              if (!batchesByDevice[deviceId]) {
-                batchesByDevice[deviceId] = []
-              }
-              batchesByDevice[deviceId].push(batch)
-            }
-          })
-          // Sort batches by created_at for each device
-          Object.keys(batchesByDevice).forEach(deviceId => {
-            batchesByDevice[deviceId].sort((a, b) => {
-              const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
-              const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
-              return bTime - aTime
-            })
+      devicesData.forEach(device => {
+        if (device.last_anchor) {
+          const deviceId = device.device_id
+          if (!batchesByDevice[deviceId]) {
+            batchesByDevice[deviceId] = []
+          }
+          // Use the last_anchor data if available
+          batchesByDevice[deviceId].push({
+            batch_id: device.last_anchor.batch_id,
+            merkle_root: device.last_anchor.merkle_root,
+            created_at: device.last_anchor.created_at,
+            anchored: 1,
           })
         }
-      } catch (e) {
-        console.error("Error fetching batches for devices:", e)
-      }
+      })
 
       setDevices(
         devicesData.map((d) => {
@@ -86,7 +77,7 @@ export default function Devices() {
           
           const storageStr = typeof d.storage_bytes === "number" ? formatBytes(d.storage_bytes) : "—"
           
-          // Find last anchor for this device
+          // Find last anchor for this device (use included data or fallback)
           const deviceBatches = batchesByDevice[d.device_id] || []
           const lastBatch = deviceBatches.find(b => b.anchored === 1) || deviceBatches[0]
           
@@ -99,9 +90,9 @@ export default function Devices() {
             version: d.version || "—",
             monitoredPaths: [],
             lastHash: lastBatch?.merkle_root?.slice(0, 20) + "..." || "—",
-            lastAnchor: lastBatch ? `Batch ${lastBatch.batch_id || lastBatch.id.slice(0, 8)}` : "—",
+            lastAnchor: lastBatch ? `Batch ${lastBatch.batch_id || lastBatch.id?.slice(0, 8)}` : "—",
             storageSize: storageStr,
-            logsCount: deviceBatches.reduce((sum, b) => sum + (b.size || 0), 0),
+            logsCount: d.total_logs || deviceBatches.reduce((sum, b) => sum + (b.size || 0), 0),
           }
         })
       )

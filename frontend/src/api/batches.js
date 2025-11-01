@@ -27,4 +27,8 @@ export async function getOnchainTotal() {
   return apiFetch("/onchain/total", { method: "GET" });
 }
 
+export async function getDashboardStats() {
+  return apiFetch("/dashboard/stats", { method: "GET" });
+}
+
 
