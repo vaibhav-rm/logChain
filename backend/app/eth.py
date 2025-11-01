@@ -16,12 +16,25 @@ CHAIN_ID = int(os.getenv("CHAIN_ID", "11155111"))  # Sepolia default
 CONTRACT_ADDRESS_FILE = os.getenv("CONTRACT_ADDRESS_FILE", "./deployed_contract_addr.txt")
 
 # === Web3 Setup ===
-w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
-if not w3.is_connected():
-    raise ConnectionError("⚠️  Web3 provider not connected. Check your WEB3_PROVIDER_URL.")
-
-# Inject PoA middleware for Sepolia
-w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+# Don't raise on import if provider is missing or unreachable. Create a lazy
+# w3 that can be checked by callers. This prevents the whole app from
+# crashing on import in environments where a provider isn't configured.
+w3 = None
+if WEB3_PROVIDER:
+    try:
+        _w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
+        # Only keep if connected
+        if _w3.is_connected():
+            w3 = _w3
+            # Inject PoA middleware for networks that need it
+            try:
+                w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            except Exception:
+                # If the middleware isn't available/needed, ignore
+                pass
+    except Exception:
+        # Leave w3 as None; callers should handle missing provider
+        w3 = None
 
 # === Solidity Compiler Setup ===
 SOLC_VERSION = "0.8.17"
@@ -56,6 +69,9 @@ def compile_contract(solidity_file_path: str):
 
 def deploy_contract(abi, bytecode):
     """Deploy smart contract and save its address to file"""
+    if w3 is None:
+        raise RuntimeError("Web3 provider not configured. Set WEB3_PROVIDER_URL to deploy.")
+
     acct = w3.eth.account.from_key(PRIVATE_KEY)
     contract = w3.eth.contract(abi=abi, bytecode=bytecode)
     nonce = w3.eth.get_transaction_count(acct.address)
@@ -84,6 +100,9 @@ def deploy_contract(abi, bytecode):
 
 def load_contract_instance(abi, contract_address):
     """Load an existing deployed contract instance"""
+    if w3 is None:
+        raise RuntimeError("Web3 provider not configured. Cannot load contract instance.")
+
     return w3.eth.contract(
         address=Web3.to_checksum_address(contract_address),
         abi=abi,
@@ -95,6 +114,9 @@ def anchor_root(contract, root_hex: str, batch_id: str = "", ipfs_cid: str = "")
     Anchor Merkle root on-chain.
     Calls: anchor(bytes32 root, string batchId, string ipfsCid)
     """
+    if w3 is None:
+        raise RuntimeError("Web3 provider not configured. Cannot anchor root.")
+
     acct = w3.eth.account.from_key(PRIVATE_KEY)
     nonce = w3.eth.get_transaction_count(acct.address)
 

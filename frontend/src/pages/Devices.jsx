@@ -19,22 +19,89 @@ export default function Devices() {
     try {
       setLoading(true)
       const res = await listDevices()
+      const devicesData = Array.isArray(res) ? res : []
+      
+      // Get batches to find last anchor for each device
+      let batchesByDevice = {}
+      try {
+        const { listBatches } = await import("../api/batches")
+        const batches = await listBatches()
+        if (Array.isArray(batches)) {
+          batches.forEach(batch => {
+            const deviceId = batch.device_id
+            if (deviceId) {
+              if (!batchesByDevice[deviceId]) {
+                batchesByDevice[deviceId] = []
+              }
+              batchesByDevice[deviceId].push(batch)
+            }
+          })
+          // Sort batches by created_at for each device
+          Object.keys(batchesByDevice).forEach(deviceId => {
+            batchesByDevice[deviceId].sort((a, b) => {
+              const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+              const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+              return bTime - aTime
+            })
+          })
+        }
+      } catch (e) {
+        console.error("Error fetching batches for devices:", e)
+      }
+
       setDevices(
-        Array.isArray(res)
-          ? res.map((d) => ({
-              id: d.device_id,
-              name: d.name,
-              platform: "Unknown platform",
-              status: "online",
-              lastSeen: "—",
-              version: "—",
-              monitoredPaths: [],
-              lastHash: "—",
-              lastAnchor: "—",
-              storageSize: "—",
-              logsCount: 0,
-            }))
-          : []
+        devicesData.map((d) => {
+          let lastSeen = null
+          if (d.last_seen) {
+            try {
+              // Handle ISO string, date object, or MongoDB datetime
+              if (typeof d.last_seen === 'string') {
+                // Ensure UTC format for proper parsing
+                let dateStr = d.last_seen
+                if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                  dateStr = dateStr + 'Z'  // Assume UTC if no timezone indicator
+                }
+                lastSeen = new Date(dateStr)
+              } else if (d.last_seen && typeof d.last_seen === 'object') {
+                // MongoDB datetime might be passed as object with $date or isoDate
+                lastSeen = new Date(d.last_seen.$date || d.last_seen.isoDate || d.last_seen)
+              } else {
+                lastSeen = new Date(d.last_seen)
+              }
+              // Check if date is valid
+              if (isNaN(lastSeen.getTime())) {
+                console.warn("Invalid last_seen for device:", d.device_id, d.last_seen)
+                lastSeen = null
+              }
+            } catch (e) {
+              console.error("Error parsing last_seen for device:", d.device_id, e, d.last_seen)
+              lastSeen = null
+            }
+          }
+          const now = Date.now()
+          // Device is online if last_seen is within 6 minutes (allowing for heartbeat interval + network delay)
+          const isOnline = lastSeen && (now - lastSeen.getTime()) < 6 * 60 * 1000 // 6 minutes
+          
+          const storageStr = typeof d.storage_bytes === "number" ? formatBytes(d.storage_bytes) : "—"
+          
+          // Find last anchor for this device
+          const deviceBatches = batchesByDevice[d.device_id] || []
+          const lastBatch = deviceBatches.find(b => b.anchored === 1) || deviceBatches[0]
+          
+          return {
+            id: d.device_id,
+            name: d.name || d.device_id,
+            platform: d.platform || "—",
+            status: isOnline ? "online" : "offline",
+            lastSeen: lastSeen ? lastSeen.toLocaleString() : "—",
+            version: d.version || "—",
+            monitoredPaths: [],
+            lastHash: lastBatch?.merkle_root?.slice(0, 20) + "..." || "—",
+            lastAnchor: lastBatch ? `Batch ${lastBatch.batch_id || lastBatch.id.slice(0, 8)}` : "—",
+            storageSize: storageStr,
+            logsCount: deviceBatches.reduce((sum, b) => sum + (b.size || 0), 0),
+          }
+        })
       )
       setError("")
     } catch (err) {
@@ -46,7 +113,17 @@ export default function Devices() {
 
   useEffect(() => {
     fetchDevices()
+    // Auto-refresh every 10 seconds to show updated device status
+    const interval = setInterval(fetchDevices, 10000)
+    return () => clearInterval(interval)
   }, [])
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return "0 B"
+    const units = ["B", "KB", "MB", "GB", "TB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+  }
 
   const onAddDevice = async (e) => {
     e.preventDefault()

@@ -1,0 +1,8 @@
+{
+  "BACKEND_URL": "http://127.0.0.1:8000",
+  "CLIENT_EMAIL": "",
+  "DEVICE_ID": "devA23",
+  "DEVICE_NAME": "devA23",
+  "LOG_DIR": "/var/log",
+  "BATCH_INTERVAL": 60
+}

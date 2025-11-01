@@ -8,6 +8,7 @@ import os
 
 from app.db import users_collection, devices_collection, batches_collection
 from app import schemas
+from datetime import datetime
 from app.eth import compile_contract, load_contract_instance, anchor_root
 from app.auth import create_access_token, hash_password, verify_password
 from app.utils import get_current_user
@@ -46,6 +47,10 @@ init_contract()
 # === Utility ===
 def serialize_batch(doc):
     """Convert MongoDB document to serializable dict"""
+    created_at = doc.get("created_at")
+    # Convert datetime to ISO format string if it's a datetime object
+    if created_at and isinstance(created_at, datetime):
+        created_at = created_at.isoformat() + "Z"  # Add Z to indicate UTC
     return {
         "id": str(doc["_id"]),
         "batch_id": doc.get("batch_id"),
@@ -56,6 +61,7 @@ def serialize_batch(doc):
         "anchored": doc.get("anchored", 0),
         "tx_hash": doc.get("tx_hash"),
         "tx_block": doc.get("tx_block"),
+        "created_at": created_at,
     }
 
 # === Routes ===
@@ -72,7 +78,8 @@ def create_batch(b: schemas.BatchCreate, current_user=Depends(get_current_user))
         "ipfs_cid": b.ipfs_cid,
         "size": b.size,
         "anchored": 0,
-        "user_id": ObjectId(current_user)
+        "user_id": ObjectId(current_user),
+        "created_at": datetime.utcnow(),
     }
     result = batches_collection.insert_one(batch_doc)
     batch_doc["_id"] = result.inserted_id
@@ -80,13 +87,16 @@ def create_batch(b: schemas.BatchCreate, current_user=Depends(get_current_user))
 
 
 @app.post("/batches/{batch_id}/anchor", tags=["Batch"])
-def anchor_batch(batch_id: str):
+def anchor_batch(batch_id: str, current_user=Depends(get_current_user)):
     if contract_instance is None:
         raise HTTPException(status_code=500, detail="Contract not configured or deployed")
 
     batch = batches_collection.find_one({"_id": ObjectId(batch_id)})
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    # Verify batch belongs to current user
+    if batch.get("user_id") != ObjectId(current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
     if batch.get("anchored") == 1:
         return {"status": "already anchored", "tx_hash": batch.get("tx_hash")}
 
@@ -103,14 +113,17 @@ def anchor_batch(batch_id: str):
 
 @app.get("/batches", response_model=list[schemas.BatchOut], tags=["Batch"])
 def list_batches(current_user=Depends(get_current_user)):
-    docs = batches_collection.find({"user_id": ObjectId(current_user)})
+    docs = batches_collection.find({"user_id": ObjectId(current_user)}).sort("created_at", -1)
     return [serialize_batch(d) for d in docs]
 
 @app.get("/batches/{batch_id}", response_model=schemas.BatchOut, tags=["Batch"])
-def get_batch(batch_id: str):
+def get_batch(batch_id: str, current_user=Depends(get_current_user)):
     doc = batches_collection.find_one({"_id": ObjectId(batch_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Batch not found")
+    # Verify batch belongs to current user
+    if doc.get("user_id") != ObjectId(current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_batch(doc)
 
 
@@ -122,14 +135,17 @@ def onchain_total():
     return {"total_batches": total}
 
 @app.get("/batches/{batch_id}/verify", tags=["Batch"])
-def verify_batch(batch_id: str):
-    """Verify whether a batch’s Merkle root exists on-chain"""
+def verify_batch(batch_id: str, current_user=Depends(get_current_user)):
+    """Verify whether a batch's Merkle root exists on-chain"""
     if contract_instance is None:
         raise HTTPException(status_code=500, detail="Contract not configured or deployed")
 
     batch = batches_collection.find_one({"_id": ObjectId(batch_id)})
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
+    # Verify batch belongs to current user
+    if batch.get("user_id") != ObjectId(current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     root_hex = batch.get("merkle_root")
     if not root_hex:
@@ -201,9 +217,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/devices", tags=["Device"])
 def register_device(device: schemas.DeviceCreate, current_user=Depends(get_current_user)):
-    doc = {"user_id": ObjectId(current_user), "device_id": device.device_id, "name": device.name}
-    if devices_collection.find_one({"device_id": device.device_id}):
-        raise HTTPException(status_code=400, detail="Device ID already exists")
+    # Check if device already exists for this user
+    existing = devices_collection.find_one({"user_id": ObjectId(current_user), "device_id": device.device_id})
+    if existing:
+        raise HTTPException(status_code=400, detail="Device ID already registered for your account")
+    doc = {"user_id": ObjectId(current_user), "device_id": device.device_id, "name": device.name, "created_at": datetime.utcnow()}
     devices_collection.insert_one(doc)
     users_collection.update_one({"_id": ObjectId(current_user)}, {"$push": {"devices": device.device_id}})
     return {"status": "registered", "device_id": device.device_id}
@@ -211,5 +229,39 @@ def register_device(device: schemas.DeviceCreate, current_user=Depends(get_curre
 @app.get("/devices", tags=["Device"])
 def list_devices(current_user=Depends(get_current_user)):
     devices = list(devices_collection.find({"user_id": ObjectId(current_user)}))
-    return [{"device_id": d["device_id"], "name": d.get("name")} for d in devices]
+    result = []
+    for d in devices:
+        last_seen = d.get("last_seen")
+        # Convert datetime to ISO format string if it's a datetime object
+        if last_seen and isinstance(last_seen, datetime):
+            last_seen = last_seen.isoformat() + "Z"  # Add Z to indicate UTC
+        result.append({
+            "device_id": d.get("device_id"),
+            "name": d.get("name"),
+            "platform": d.get("platform"),
+            "version": d.get("version"),
+            "last_seen": last_seen,
+            "storage_bytes": d.get("storage_bytes"),
+        })
+    return result
+
+@app.post("/devices/heartbeat", tags=["Device"])
+def device_heartbeat(hb: schemas.DeviceHeartbeat, current_user=Depends(get_current_user)):
+    # Verify device belongs to current user
+    device = devices_collection.find_one({"user_id": ObjectId(current_user), "device_id": hb.device_id})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found or access denied")
+    
+    update = {
+        "platform": hb.platform,
+        "version": hb.version,
+        "storage_bytes": hb.storage_bytes,
+        "last_seen": datetime.utcnow(),
+    }
+    devices_collection.update_one(
+        {"user_id": ObjectId(current_user), "device_id": hb.device_id},
+        {"$set": update},
+        upsert=False,
+    )
+    return {"status": "ok", "device_id": hb.device_id}
 

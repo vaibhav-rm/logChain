@@ -24,7 +24,7 @@ export default function Logs() {
               id: b.id,
               batchId: b.batch_id || "—",
               merkleRoot: b.merkle_root,
-              timestamp: "—",
+              timestamp: b.created_at ? new Date(b.created_at).toLocaleString() : "—",
               size: b.size || 0,
               device: b.device_id || "—",
               status: b.anchored === 1 ? "anchored" : "pending",
@@ -45,13 +45,20 @@ export default function Logs() {
 
   useEffect(() => {
     fetchBatches()
+    // Auto-refresh every 15 seconds to show new batches
+    const interval = setInterval(fetchBatches, 15000)
+    return () => clearInterval(interval)
   }, [])
 
   const filteredBatches = batches.filter((batch) => {
     const matchesSearch =
-      batch.batchId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      batch.device.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filterStatus === "all" || batch.status === filterStatus
+      (batch.batchId || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (batch.device || "").toLowerCase().includes(searchTerm.toLowerCase())
+    let matchesFilter = true
+    if (filterStatus === "all") matchesFilter = true
+    else if (filterStatus === "anchored") matchesFilter = batch.status === "anchored"
+    else if (filterStatus === "verified") matchesFilter = batch.status === "anchored" // verified means anchored
+    else if (filterStatus === "pending") matchesFilter = batch.status === "pending"
     return matchesSearch && matchesFilter
   })
 
@@ -109,8 +116,9 @@ export default function Logs() {
             </div>
           )}
           {!loading && !error && batches.length === 0 && (
-            <div className="text-gray-400 p-4">No batches yet. Once your agent sends logs, they will appear here.</div>
+            <div className="text-gray-400 p-4 text-center py-8">No batches yet. Once your agent sends logs, they will appear here.</div>
           )}
+          {!loading && !error && filteredBatches.length > 0 && (
           <table className="w-full">
             <thead>
               <tr className="border-b border-dark-600">
@@ -189,6 +197,7 @@ export default function Logs() {
               ))}
             </tbody>
           </table>
+          )}
           {actionMsg && <div className="p-3 text-sm text-gray-300">{actionMsg}</div>}
         </div>
       </Card>

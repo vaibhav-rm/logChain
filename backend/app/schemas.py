@@ -1,6 +1,7 @@
 # backend/app/schemas.py
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from datetime import datetime
 
 class BatchCreate(BaseModel):
     batch_id: Optional[str] = None
@@ -19,9 +20,10 @@ class BatchOut(BaseModel):
     anchored: int
     tx_hash: Optional[str]
     tx_block: Optional[int]
+    created_at: Optional[datetime]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserCreate(BaseModel):
@@ -31,3 +33,9 @@ class UserCreate(BaseModel):
 class DeviceCreate(BaseModel):
     device_id: str
     name: str
+
+class DeviceHeartbeat(BaseModel):
+    device_id: str
+    platform: Optional[str] = None
+    version: Optional[str] = None
+    storage_bytes: Optional[int] = None
