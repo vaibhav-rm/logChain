@@ -265,3 +265,21 @@ def device_heartbeat(hb: schemas.DeviceHeartbeat, current_user=Depends(get_curre
     )
     return {"status": "ok", "device_id": hb.device_id}
 
+@app.delete("/devices/{device_id}", tags=["Device"])
+def delete_device(device_id: str, current_user=Depends(get_current_user)):
+    # Verify device belongs to current user
+    device = devices_collection.find_one({"user_id": ObjectId(current_user), "device_id": device_id})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found or access denied")
+    
+    # Remove device from devices collection
+    devices_collection.delete_one({"user_id": ObjectId(current_user), "device_id": device_id})
+    
+    # Remove device_id from user's devices list
+    users_collection.update_one(
+        {"_id": ObjectId(current_user)},
+        {"$pull": {"devices": device_id}}
+    )
+    
+    return {"status": "deleted", "device_id": device_id}
+

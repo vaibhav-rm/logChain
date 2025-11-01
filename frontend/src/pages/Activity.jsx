@@ -1,114 +1,157 @@
 "use client"
 
-import { useState } from "react"
-import { Link2, Check, Upload, Server, User, Clock } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Link2, Check, Upload, Server, User, Clock, RefreshCw } from "lucide-react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
+import { listBatches, verifyBatch } from "../api/batches"
+import { listDevices } from "../api/devices"
 
 export default function Activity() {
   const [filterType, setFilterType] = useState("all")
   const [filterDevice, setFilterDevice] = useState("all")
-  const [dateRange, setDateRange] = useState("today")
+  const [dateRange, setDateRange] = useState("all")
+  const [activities, setActivities] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [devices, setDevices] = useState([])
 
-  const [activities] = useState([
-    {
-      id: 1,
-      type: "anchor",
-      title: "Batch Anchored to Blockchain",
-      description: "Batch #1247 from server-prod-01 successfully anchored",
-      timestamp: "2025-01-28 10:30:45",
-      device: "server-prod-01",
-      user: "system",
-      metadata: {
-        batchId: "batch-1247",
-        txHash: "0x9c4d1e...",
-        blockNumber: 18234567,
-      },
-      status: "success",
-    },
-    {
-      id: 2,
-      type: "verification",
-      title: "Verification Completed",
-      description: "Batch #1246 verified successfully",
-      timestamp: "2025-01-28 10:25:12",
-      device: "server-prod-01",
-      user: "admin@example.com",
-      metadata: {
-        batchId: "batch-1246",
-        result: "verified",
-      },
-      status: "success",
-    },
-    {
-      id: 3,
-      type: "upload",
-      title: "New Batch Uploaded",
-      description: "Batch uploaded and queued for anchoring",
-      timestamp: "2025-01-28 10:20:33",
-      device: "server-prod-02",
-      user: "system",
-      metadata: {
-        batchId: "batch-1245",
-        size: "8.7 KB",
-      },
-      status: "success",
-    },
-    {
-      id: 4,
-      type: "verification",
-      title: "Verification Failed",
-      description: "Tampering detected in batch #1240",
-      timestamp: "2025-01-28 10:15:22",
-      device: "server-staging-01",
-      user: "admin@example.com",
-      metadata: {
-        batchId: "batch-1240",
-        result: "failed",
-        reason: "Hash mismatch",
-      },
-      status: "error",
-    },
-    {
-      id: 5,
-      type: "device",
-      title: "Device Connected",
-      description: "server-prod-03 came online",
-      timestamp: "2025-01-28 10:10:05",
-      device: "server-prod-03",
-      user: "system",
-      metadata: {
-        version: "v1.2.3",
-      },
-      status: "success",
-    },
-    {
-      id: 6,
-      type: "device",
-      title: "Device Disconnected",
-      description: "server-staging-01 went offline",
-      timestamp: "2025-01-28 09:45:18",
-      device: "server-staging-01",
-      user: "system",
-      metadata: {
-        lastSeen: "2 hours ago",
-      },
-      status: "warning",
-    },
-    {
-      id: 7,
-      type: "user",
-      title: "User Login",
-      description: "admin@example.com logged in",
-      timestamp: "2025-01-28 09:30:00",
-      device: null,
-      user: "admin@example.com",
-      metadata: {
-        ip: "192.168.1.100",
-      },
-      status: "success",
-    },
-  ])
+  const formatTime = (dateString) => {
+    if (!dateString) return "—"
+    try {
+      let dateStr = dateString
+      if (typeof dateStr === 'string' && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+        dateStr = dateStr + 'Z'
+      }
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return "—"
+      return date.toLocaleString()
+    } catch (e) {
+      console.error("Error formatting date:", e, dateString)
+      return "—"
+    }
+  }
+
+  const fetchActivities = async () => {
+    try {
+      setLoading(true)
+      const [batchesData, devicesData] = await Promise.all([
+        listBatches(),
+        listDevices(),
+      ])
+
+      const batches = Array.isArray(batchesData) ? batchesData : []
+      const devicesList = Array.isArray(devicesData) ? devicesData : []
+      setDevices(devicesList)
+
+      const activityList = []
+
+      // Process batches - create activities for uploads and anchors
+      batches.forEach((batch) => {
+        const deviceId = batch.device_id || "Unknown"
+        
+        // Upload activity (when batch was created)
+        if (batch.created_at) {
+          activityList.push({
+            id: `upload-${batch.id}`,
+            type: "upload",
+            title: "New Batch Uploaded",
+            description: `Batch ${batch.batch_id || batch.id.slice(0, 8)} from ${deviceId} uploaded`,
+            timestamp: batch.created_at,
+            device: deviceId,
+            user: "system",
+            metadata: {
+              batchId: batch.batch_id || batch.id.slice(0, 8),
+              size: batch.size ? `${(batch.size / 1024).toFixed(2)} KB` : "—",
+              merkleRoot: batch.merkle_root?.slice(0, 20) + "...",
+            },
+            status: "success",
+            sortTime: new Date(batch.created_at + (batch.created_at.endsWith('Z') ? '' : 'Z')).getTime(),
+          })
+        }
+
+        // Anchor activity (when batch was anchored)
+        if (batch.anchored === 1 && batch.tx_hash) {
+          activityList.push({
+            id: `anchor-${batch.id}`,
+            type: "anchor",
+            title: "Batch Anchored to Blockchain",
+            description: `Batch ${batch.batch_id || batch.id.slice(0, 8)} from ${deviceId} successfully anchored`,
+            timestamp: batch.created_at, // Use created_at as anchor timestamp approximation
+            device: deviceId,
+            user: "system",
+            metadata: {
+              batchId: batch.batch_id || batch.id.slice(0, 8),
+              txHash: batch.tx_hash?.slice(0, 20) + "...",
+              blockNumber: batch.tx_block || "—",
+            },
+            status: "success",
+            sortTime: new Date(batch.created_at + (batch.created_at.endsWith('Z') ? '' : 'Z')).getTime(),
+          })
+        }
+      })
+
+      // Process devices - create activities for online/offline status
+      const now = Date.now()
+      devicesList.forEach((device) => {
+        if (!device.last_seen) return
+        
+        try {
+          let lastSeenTime
+          if (typeof device.last_seen === 'string') {
+            let dateStr = device.last_seen
+            if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+              dateStr = dateStr + 'Z'
+            }
+            lastSeenTime = new Date(dateStr).getTime()
+          } else {
+            lastSeenTime = new Date(device.last_seen).getTime()
+          }
+
+          if (isNaN(lastSeenTime)) return
+
+          const isOnline = (now - lastSeenTime) < 6 * 60 * 1000 // 6 minutes
+          const deviceName = device.name || device.device_id
+
+          activityList.push({
+            id: `device-${device.device_id}-${isOnline ? 'online' : 'offline'}`,
+            type: "device",
+            title: isOnline ? "Device Connected" : "Device Disconnected",
+            description: `${deviceName} ${isOnline ? "came online" : "went offline"}`,
+            timestamp: device.last_seen,
+            device: device.device_id,
+            user: "system",
+            metadata: {
+              version: device.version || "—",
+              platform: device.platform || "—",
+              lastSeen: formatTime(device.last_seen),
+            },
+            status: isOnline ? "success" : "warning",
+            sortTime: lastSeenTime,
+          })
+        } catch (e) {
+          console.error("Error processing device activity:", e, device)
+        }
+      })
+
+      // Sort by timestamp (most recent first)
+      activityList.sort((a, b) => b.sortTime - a.sortTime)
+      setActivities(activityList)
+      setError("")
+    } catch (err) {
+      setError(err.message || "Failed to load activities")
+      console.error("Error fetching activities:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchActivities()
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchActivities, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const eventIcons = {
     anchor: <Link2 className="w-5 h-5 text-white" />,
@@ -121,15 +164,46 @@ export default function Activity() {
   const filteredActivities = activities.filter((activity) => {
     const matchesType = filterType === "all" || activity.type === filterType
     const matchesDevice = filterDevice === "all" || activity.device === filterDevice
-    return matchesType && matchesDevice
+    
+    // Filter by date range
+    let matchesDate = true
+    if (dateRange !== "all" && activity.sortTime) {
+      const now = Date.now()
+      const activityTime = activity.sortTime
+      const diff = now - activityTime
+      
+      switch (dateRange) {
+        case "today":
+          matchesDate = diff < 24 * 60 * 60 * 1000
+          break
+        case "week":
+          matchesDate = diff < 7 * 24 * 60 * 60 * 1000
+          break
+        case "month":
+          matchesDate = diff < 30 * 24 * 60 * 60 * 1000
+          break
+        default:
+          matchesDate = true
+      }
+    }
+    
+    return matchesType && matchesDevice && matchesDate
   })
+
+  const uniqueDevices = Array.from(new Set(activities.map(a => a.device).filter(Boolean)))
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Activity Trail</h1>
-        <p className="text-gray-400">Complete audit log of all system events</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Activity Trail</h1>
+          <p className="text-gray-400">Complete audit log of all system events</p>
+        </div>
+        <button className="btn-secondary" onClick={fetchActivities} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 inline mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
 
       {/* Filters */}
@@ -150,9 +224,9 @@ export default function Activity() {
             <label className="block text-sm font-medium text-gray-400 mb-2">Device</label>
             <select value={filterDevice} onChange={(e) => setFilterDevice(e.target.value)} className="input-field">
               <option value="all">All Devices</option>
-              <option value="server-prod-01">server-prod-01</option>
-              <option value="server-prod-02">server-prod-02</option>
-              <option value="server-staging-01">server-staging-01</option>
+              {uniqueDevices.map((deviceId) => (
+                <option key={deviceId} value={deviceId}>{deviceId}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -169,8 +243,13 @@ export default function Activity() {
 
       {/* Activity Timeline */}
       <Card>
+        {loading && <div className="text-gray-400 py-8 text-center">Loading activities...</div>}
+        {error && <div className="text-red-400 py-4">{error}</div>}
+        {!loading && !error && filteredActivities.length === 0 && (
+          <div className="text-gray-400 py-8 text-center">No activities found. Try adjusting your filters.</div>
+        )}
         <div className="space-y-4">
-          {filteredActivities.map((activity, index) => (
+          {!loading && !error && filteredActivities.map((activity, index) => (
             <div
               key={activity.id}
               className="flex gap-4 p-4 bg-dark-700/30 rounded-lg border border-dark-600/50 
@@ -210,7 +289,7 @@ export default function Activity() {
 
                 {/* Metadata */}
                 <div className="flex flex-wrap gap-4 text-xs text-gray-500 mt-3">
-                  <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {activity.timestamp}</span>
+                  <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5"/> {formatTime(activity.timestamp)}</span>
                   {activity.device && <span className="inline-flex items-center gap-1"><Server className="w-3.5 h-3.5"/> {activity.device}</span>}
                   <span className="inline-flex items-center gap-1"><User className="w-3.5 h-3.5"/> {activity.user}</span>
                 </div>

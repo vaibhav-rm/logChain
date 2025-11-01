@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Server, CheckCircle2, AlertTriangle, RefreshCw, Plus } from "lucide-react"
+import { Server, CheckCircle2, AlertTriangle, RefreshCw, Plus, Trash2 } from "lucide-react"
 import Card from "../components/Card"
 import Badge from "../components/Badge"
-import { listDevices, registerDevice } from "../api/devices"
+import { listDevices, registerDevice, deleteDevice } from "../api/devices"
 
 export default function Devices() {
   const [selectedDevice, setSelectedDevice] = useState(null)
@@ -13,6 +13,8 @@ export default function Devices() {
   const [error, setError] = useState("")
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [form, setForm] = useState({ device_id: "", name: "" })
 
   const fetchDevices = async () => {
@@ -141,6 +143,26 @@ export default function Devices() {
     }
   }
 
+  const onDeleteDevice = async (deviceId, deviceName) => {
+    if (confirmDelete !== deviceId) {
+      setConfirmDelete(deviceId)
+      return
+    }
+    try {
+      setDeleting(deviceId)
+      await deleteDevice(deviceId)
+      setConfirmDelete(null)
+      await fetchDevices()
+      if (selectedDevice && selectedDevice.id === deviceId) {
+        setSelectedDevice(null)
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete device")
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -235,9 +257,35 @@ export default function Devices() {
               </div>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-dark-600">
-              <button className="text-sm text-neon-indigo hover:text-neon-purple transition-colors">
+            <div className="mt-4 pt-4 border-t border-dark-600 flex items-center justify-between">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedDevice(device)
+                }}
+                className="text-sm text-neon-indigo hover:text-neon-purple transition-colors"
+              >
                 View Details →
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteDevice(device.id, device.name)
+                }}
+                disabled={deleting === device.id}
+                className="text-sm text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                {confirmDelete === device.id ? (
+                  <>
+                    <span>Confirm?</span>
+                    <Trash2 className="w-4 h-4" />
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Remove</span>
+                  </>
+                )}
               </button>
             </div>
           </Card>
@@ -334,9 +382,21 @@ export default function Devices() {
 
               {/* Actions */}
               <div className="flex gap-3">
-                <button className="btn-primary flex-1">Force Re-scan</button>
-                <button className="btn-secondary flex-1">Pause Agent</button>
-                <button className="btn-secondary">Download Logs</button>
+                <button 
+                  onClick={() => {
+                    if (confirmDelete !== selectedDevice.id) {
+                      setConfirmDelete(selectedDevice.id)
+                    } else {
+                      onDeleteDevice(selectedDevice.id, selectedDevice.name)
+                    }
+                  }}
+                  disabled={deleting === selectedDevice.id}
+                  className="btn-secondary flex-1 text-red-400 hover:text-red-300 hover:border-red-400/50 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {confirmDelete === selectedDevice.id ? "Confirm Delete" : "Remove Device"}
+                </button>
+                <button className="btn-secondary flex-1">Download Logs</button>
               </div>
             </div>
           </div>

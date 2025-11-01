@@ -380,7 +380,7 @@ class LogChainGUI:
 
         control_frame = ttk.Frame(self.tab_settings)
         control_frame.pack(fill="x", pady=10)
-
+    
         if HAS_TTKBOOTSTRAP:
             self.start_btn = ttk.Button(control_frame, text="▶ Start", bootstyle=SUCCESS, command=self.start)
             self.stop_btn = ttk.Button(control_frame, text="⏹ Stop", bootstyle=DANGER, command=self.stop, state="disabled")

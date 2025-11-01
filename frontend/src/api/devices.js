@@ -11,4 +11,7 @@ export async function registerDevice({ device_id, name }) {
   });
 }
 
+export async function deleteDevice(device_id) {
+  return apiFetch(`/devices/${device_id}`, { method: "DELETE" });
+}
 
